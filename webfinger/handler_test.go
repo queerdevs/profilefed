@@ -68,7 +68,7 @@ func TestHandler(t *testing.T) {
 	}
 
 	// Look up a non-existent resource to test error handling
-	desc, err = Lookup("http://example.com/resource/2", srv.Listener.Addr().String())
+	_, err = Lookup("http://example.com/resource/2", srv.Listener.Addr().String())
 	if err == nil {
 		t.Fatalf("Expected error, got nil")
 	}
