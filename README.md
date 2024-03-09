@@ -1,5 +1,8 @@
 # ProfileFed
 
+[![Go Reference](https://pkg.go.dev/badge/queerdevs.org/profilefed.svg)](https://pkg.go.dev/queerdevs.org/profilefed)
+[![Go Report Card](https://goreportcard.com/badge/queerdevs.org/profilefed)](https://goreportcard.com/report/queerdevs.org/profilefed)
+
 ProfileFed is a simple, lightweight federation protocol for platforms that host user profiles. This repository contains a reference implementation of the protocol, written in Go.
 
 ## Specification
