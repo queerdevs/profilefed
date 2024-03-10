@@ -87,7 +87,7 @@ func (c Client) Lookup(id string) (*Descriptor, error) {
 			return nil, err
 		}
 
-		pubkey, err = base64.StdEncoding.DecodeString(info.Pubkey)
+		pubkey, err = base64.StdEncoding.DecodeString(info.PublicKey)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +148,7 @@ func (c Client) Lookup(id string) (*Descriptor, error) {
 			return nil, err
 		}
 
-		newPubkey, err := base64.StdEncoding.DecodeString(info.Pubkey)
+		newPubkey, err := base64.StdEncoding.DecodeString(info.PublicKey)
 		if err != nil {
 			return nil, err
 		}
