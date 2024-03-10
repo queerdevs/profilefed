@@ -62,21 +62,45 @@ type Client struct {
 	GetPubkey func(serverName string) (ed25519.PublicKey, error)
 }
 
-// Lookup looks up the profile descriptor for the given ID.
-func (c Client) Lookup(id string) (*Descriptor, error) {
-	wfdesc, err := webfinger.LookupAcct(id)
+// Lookup looks up the profile descriptor for the given resource.
+func (c Client) Lookup(resource string) (*Descriptor, error) {
+	out := &Descriptor{}
+	return out, c.lookup(resource, "", out)
+}
+
+// LookupID looks up the profile descriptor that matches the given ID
+// for the given resource.
+func (c Client) LookupID(resource, id string) (*Descriptor, error) {
+	out := &Descriptor{}
+	return out, c.lookup(resource, id, out)
+}
+
+// Lookup looks up all the available profile descriptors for the given resource.
+func (c Client) LookupAll(resource string) (map[string]*Descriptor, error) {
+	out := map[string]*Descriptor{}
+	return out, c.lookup(resource, "", &out)
+}
+
+func (c Client) lookup(resource, id string, dest any) error {
+	wfdesc, err := webfinger.LookupAcct(resource)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	pfdLink, ok := wfdesc.LinkByType("application/x-pfd+json")
 	if !ok {
-		return nil, errors.New("server does not support the profilefed protocol")
+		return errors.New("server does not support the profilefed protocol")
 	}
 
 	pfdURL, err := url.Parse(pfdLink.Href)
 	if err != nil {
-		return nil, err
+		return err
+	}
+
+	if id != "" {
+		q := pfdURL.Query()
+		q.Set("id", id)
+		pfdURL.RawQuery = q.Encode()
 	}
 
 	pubkeySaved := false
@@ -84,77 +108,77 @@ func (c Client) Lookup(id string) (*Descriptor, error) {
 	if errors.Is(err, ErrPubkeyNotFound) {
 		info, _, err := getServerInfo(pfdURL.Scheme, pfdURL.Host)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		pubkey, err = base64.StdEncoding.DecodeString(info.PublicKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		err = c.SavePubkey(pfdURL.Host, info.PreviousNames, pubkey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		pubkeySaved = true
 	} else if err != nil {
-		return nil, err
+		return err
 	}
 
-	res, err := http.Get(pfdLink.Href)
+	res, err := http.Get(pfdURL.String())
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 
 	if err := checkResp(res, "getProfileDescriptor"); err != nil {
-		return nil, err
+		return err
 	}
 
 	data, err := io.ReadAll(io.LimitReader(res.Body, responseSizeLimit))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := res.Body.Close(); err != nil {
-		return nil, err
+		return err
 	}
 
 	sig, err := getSignature(res)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !ed25519.Verify(pubkey, data, sig) {
 		// If the pubkey was just saved in the current request, we probably
 		// already have the newest one, so just return a mismatch error.
 		if pubkeySaved {
-			return nil, ErrSignatureMismatch
+			return ErrSignatureMismatch
 		}
 
 		res, err := serverInfoReq(pfdURL.Scheme, pfdURL.Host)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		serverData, err := io.ReadAll(io.LimitReader(res.Body, responseSizeLimit))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		var info serverInfoData
 		err = json.Unmarshal(serverData, &info)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		newPubkey, err := base64.StdEncoding.DecodeString(info.PublicKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if bytes.Equal(pubkey, newPubkey) {
-			return nil, ErrSignatureMismatch
+			return ErrSignatureMismatch
 		}
 
 		verified := false
@@ -167,39 +191,29 @@ func (c Client) Lookup(id string) (*Descriptor, error) {
 		}
 
 		if !verified {
-			return nil, ErrSignatureMismatch
+			return ErrSignatureMismatch
 		}
 
 		infoSig, err := getSignature(res)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if !ed25519.Verify(newPubkey, infoSig, serverData) {
-			return nil, ErrSignatureMismatch
+			return ErrSignatureMismatch
 		}
 
 		err = c.SavePubkey(pfdURL.Host, info.PreviousNames, newPubkey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if !ed25519.Verify(newPubkey, data, sig) {
-			return nil, ErrSignatureMismatch
+			return ErrSignatureMismatch
 		}
 	}
 
-	desc := &Descriptor{}
-	err = json.Unmarshal(data, desc)
-	if err != nil {
-		return nil, err
-	}
-
-	if desc.Role == "" {
-		desc.Role = RoleUser
-	}
-
-	return desc, nil
+	return json.Unmarshal(data, dest)
 }
 
 // serverInfoReq performs an HTTP request to retrieve server information.
