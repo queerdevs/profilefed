@@ -65,23 +65,23 @@ type Client struct {
 // Lookup looks up the profile descriptor for the given resource.
 func (c Client) Lookup(resource string) (*Descriptor, error) {
 	out := &Descriptor{}
-	return out, c.lookup(resource, "", out)
+	return out, c.lookup(resource, "", false, out)
 }
 
 // LookupID looks up the profile descriptor that matches the given ID
 // for the given resource.
 func (c Client) LookupID(resource, id string) (*Descriptor, error) {
 	out := &Descriptor{}
-	return out, c.lookup(resource, id, out)
+	return out, c.lookup(resource, id, false, out)
 }
 
 // Lookup looks up all the available profile descriptors for the given resource.
 func (c Client) LookupAll(resource string) (map[string]*Descriptor, error) {
 	out := map[string]*Descriptor{}
-	return out, c.lookup(resource, "", &out)
+	return out, c.lookup(resource, "", true, &out)
 }
 
-func (c Client) lookup(resource, id string, dest any) error {
+func (c Client) lookup(resource, id string, all bool, dest any) error {
 	wfdesc, err := webfinger.LookupAcct(resource)
 	if err != nil {
 		return err
@@ -95,12 +95,6 @@ func (c Client) lookup(resource, id string, dest any) error {
 	pfdURL, err := url.Parse(pfdLink.Href)
 	if err != nil {
 		return err
-	}
-
-	if id != "" {
-		q := pfdURL.Query()
-		q.Set("id", id)
-		pfdURL.RawQuery = q.Encode()
 	}
 
 	pubkeySaved := false
@@ -124,6 +118,14 @@ func (c Client) lookup(resource, id string, dest any) error {
 	} else if err != nil {
 		return err
 	}
+
+	q := pfdURL.Query()
+	if all {
+		q.Set("all", "1")
+	} else if id != "" {
+		q.Set("id", id)
+	}
+	pfdURL.RawQuery = q.Encode()
 
 	res, err := http.Get(pfdURL.String())
 	if err != nil {
