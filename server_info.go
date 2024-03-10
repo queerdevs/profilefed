@@ -55,6 +55,7 @@ func (sih ServerInfoHandler) ServeHTTP(res http.ResponseWriter, req *http.Reques
 	sig := ed25519.Sign(sih.PrivateKey, data)
 	res.Header().Set("X-ProfileFed-Sig", base64.StdEncoding.EncodeToString(sig))
 
+	res.Header().Set("Content-Type", "application/json")
 	_, err = res.Write(data)
 	if err != nil {
 		sih.ErrorHandler(err, res)
