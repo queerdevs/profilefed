@@ -100,9 +100,43 @@ func (c Client) lookup(resource, id string, all bool, dest any) error {
 	pubkeySaved := false
 	pubkey, err := c.GetPubkey(pfdURL.Host)
 	if errors.Is(err, ErrPubkeyNotFound) {
-		info, _, err := getServerInfo(pfdURL.Scheme, pfdURL.Host)
+		data, sig, prevSigs, err := getServerInfo(pfdURL.Scheme, pfdURL.Host)
 		if err != nil {
 			return err
+		}
+
+		var info serverInfoData
+		err = json.Unmarshal(data, &info)
+		if err != nil {
+			return err
+		}
+
+		// If this server is advertising previous names, make sure
+		// we verify that it's telling the truth by checking the whether
+		// any of its signatures match using the pubkeys of the previous names.
+		if len(info.PreviousNames) > 0 {
+			for _, prevName := range info.PreviousNames {
+				pubkey, err = c.GetPubkey(prevName)
+				if errors.Is(err, ErrPubkeyNotFound) {
+					continue
+				} else if err != nil {
+					return err
+				}
+
+				if ed25519.Verify(pubkey, data, sig) {
+					break
+				}
+
+				for _, prevSig := range prevSigs {
+					if ed25519.Verify(pubkey, data, prevSig) {
+						break
+					}
+				}
+
+				// If we haven't broken out of the loop by now, this
+				// name could not be verified, so return an error.
+				return ErrSignatureMismatch
+			}
 		}
 
 		pubkey, err = base64.StdEncoding.DecodeString(info.PublicKey)
@@ -229,20 +263,24 @@ func serverInfoReq(scheme, host string) (*http.Response, error) {
 }
 
 // getServerInfo retrieves server information.
-func getServerInfo(scheme, host string) (serverInfoData, [][]byte, error) {
+func getServerInfo(scheme, host string) (data, sig []byte, prevSigs [][]byte, err error) {
 	res, err := serverInfoReq(scheme, host)
 	if err != nil {
-		return serverInfoData{}, nil, err
+		return nil, nil, nil, err
 	}
 	defer res.Body.Close()
 
 	if err := checkResp(res, "getServerInfo"); err != nil {
-		return serverInfoData{}, nil, err
+		return nil, nil, nil, err
 	}
 
-	var out serverInfoData
-	err = json.NewDecoder(io.LimitReader(res.Body, responseSizeLimit)).Decode(&out)
-	return out, getPrevSignatures(res), err
+	sig, err = getSignature(res)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	data, err = io.ReadAll(io.LimitReader(res.Body, responseSizeLimit))
+	return data, sig, getPrevSignatures(res), err
 }
 
 // getPrevSignatures extracts previous signatures from a response.
