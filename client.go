@@ -192,12 +192,7 @@ func (c Client) lookup(resource, id string, all bool, dest any) error {
 			return ErrSignatureMismatch
 		}
 
-		res, err := serverInfoReq(pfdURL.Scheme, pfdURL.Host)
-		if err != nil {
-			return err
-		}
-
-		serverData, err := io.ReadAll(io.LimitReader(res.Body, responseSizeLimit))
+		serverData, infoSig, sigs, err := getServerInfo(pfdURL.Scheme, pfdURL.Host)
 		if err != nil {
 			return err
 		}
@@ -213,12 +208,13 @@ func (c Client) lookup(resource, id string, all bool, dest any) error {
 			return err
 		}
 
+		// If the pubkey hasn't changed but we couldn't
+		// verify the signature, return an error immediately.
 		if bytes.Equal(pubkey, newPubkey) {
 			return ErrSignatureMismatch
 		}
 
 		verified := false
-		sigs := getPrevSignatures(res)
 		for _, sig := range sigs {
 			if ed25519.Verify(pubkey, serverData, sig) {
 				verified = true
@@ -228,11 +224,6 @@ func (c Client) lookup(resource, id string, all bool, dest any) error {
 
 		if !verified {
 			return ErrSignatureMismatch
-		}
-
-		infoSig, err := getSignature(res)
-		if err != nil {
-			return err
 		}
 
 		if !ed25519.Verify(newPubkey, infoSig, serverData) {
@@ -252,19 +243,15 @@ func (c Client) lookup(resource, id string, all bool, dest any) error {
 	return json.Unmarshal(data, dest)
 }
 
-// serverInfoReq performs an HTTP request to retrieve server information.
-func serverInfoReq(scheme, host string) (*http.Response, error) {
+// getServerInfo retrieves server information.
+func getServerInfo(scheme, host string) (data, sig []byte, prevSigs [][]byte, err error) {
 	serverInfoURL := url.URL{
 		Scheme: scheme,
 		Host:   host,
 		Path:   "/_profilefed/server",
 	}
-	return http.Get(serverInfoURL.String())
-}
 
-// getServerInfo retrieves server information.
-func getServerInfo(scheme, host string) (data, sig []byte, prevSigs [][]byte, err error) {
-	res, err := serverInfoReq(scheme, host)
+	res, err := http.Get(serverInfoURL.String())
 	if err != nil {
 		return nil, nil, nil, err
 	}
