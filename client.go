@@ -64,29 +64,60 @@ type Client struct {
 
 // Lookup looks up the profile descriptor for the given resource.
 func (c Client) Lookup(resource string) (*Descriptor, error) {
+	wfdesc, err := webfinger.LookupAcct(resource)
+	if err != nil {
+		return nil, err
+	}
+
 	out := &Descriptor{}
-	return out, c.lookup(resource, "", false, out)
+	return out, c.lookup(wfdesc, "", false, out)
 }
 
 // LookupID looks up the profile descriptor that matches the given ID
 // for the given resource.
 func (c Client) LookupID(resource, id string) (*Descriptor, error) {
+	wfdesc, err := webfinger.LookupAcct(resource)
+	if err != nil {
+		return nil, err
+	}
+
 	out := &Descriptor{}
-	return out, c.lookup(resource, id, false, out)
+	return out, c.lookup(wfdesc, id, false, out)
 }
 
 // Lookup looks up all the available profile descriptors for the given resource.
 func (c Client) LookupAll(resource string) (map[string]*Descriptor, error) {
-	out := map[string]*Descriptor{}
-	return out, c.lookup(resource, "", true, &out)
-}
-
-func (c Client) lookup(resource, id string, all bool, dest any) error {
 	wfdesc, err := webfinger.LookupAcct(resource)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	out := map[string]*Descriptor{}
+	return out, c.lookup(wfdesc, "", true, &out)
+}
+
+// LookupWebFinger is the same as [Client.Lookup], but it accepts an existing WebFinger
+// descriptor rather than looking one up.
+func (c Client) LookupWebFinger(wfdesc *webfinger.Descriptor) (*Descriptor, error) {
+	out := &Descriptor{}
+	return out, c.lookup(wfdesc, "", false, out)
+}
+
+// LookupWebFingerID is the same as [Client.LookupID], but it accepts an existing WebFinger
+// descriptor rather than looking one up.
+func (c Client) LookupWebFingerID(wfdesc *webfinger.Descriptor, id string) (*Descriptor, error) {
+	out := &Descriptor{}
+	return out, c.lookup(wfdesc, id, false, out)
+}
+
+// LookupAllWebFinger is the same as [Client.LookupAll], but it accepts an existing WebFinger
+// descriptor rather than looking one up.
+func (c Client) LookupAllWebFinger(wfdesc *webfinger.Descriptor) (map[string]*Descriptor, error) {
+	out := map[string]*Descriptor{}
+	return out, c.lookup(wfdesc, "", true, out)
+}
+
+func (c Client) lookup(wfdesc *webfinger.Descriptor, id string, all bool, dest any) error {
 	pfdLink, ok := wfdesc.LinkByType("application/x-pfd+json")
 	if !ok {
 		return errors.New("server does not support the profilefed protocol")
