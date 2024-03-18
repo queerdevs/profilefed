@@ -114,7 +114,7 @@ func (c Client) LookupWebFingerID(wfdesc *webfinger.Descriptor, id string) (*Des
 // descriptor rather than looking one up.
 func (c Client) LookupAllWebFinger(wfdesc *webfinger.Descriptor) (map[string]*Descriptor, error) {
 	out := map[string]*Descriptor{}
-	return out, c.lookup(wfdesc, "", true, out)
+	return out, c.lookup(wfdesc, "", true, &out)
 }
 
 func (c Client) lookup(wfdesc *webfinger.Descriptor, id string, all bool, dest any) error {
